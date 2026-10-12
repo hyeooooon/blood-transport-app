@@ -4,3 +4,5 @@ data/
 tmp/
 .codex/
 *.log
+__pycache__/
+*.pyc

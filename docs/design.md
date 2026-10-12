@@ -11,6 +11,8 @@ Dependency-free Node 20+ HTTP server with server-sent events; semantic HTML/CSS/
 ## Monitoring
 Use example, configurable transport profiles, not clinically approved limits. Report chamber air temperature, never claim core blood temperature. Motion is an impact measurement; platelet agitation is separately reported. Unknown, stale, or absent values cannot produce a normal state. Threshold excursion alerts remain in history after recovery; acknowledgement does not resolve them. Telemetry older than 15 seconds produces an unavailable state; location timestamp is independently checked. Robot-source telemetry overrides simulation for that delivery and cannot be overwritten by simulator commands.
 
+Real-source transition clears synthetic chart history and the fictional dispatch time. The robot supplies transportStartedAt; if unavailable, duration is explicitly unknown and normal receipt remains blocked. Global simulator-off mode also rejects one-shot scenario commands. Delivery list ETAs use the same freshness rules as the map.
+
 ## Demo workflow
 Select a demo staff role, inspect seeded deliveries, simulate temperature excursion, impact, delay, connection loss, or lock opening, acknowledge alerts, report an incident, and verify receipt by unit code. Demo-only scenario controls are visible and never command hardware. Simulator follows a schematic hospital route. Real position coordinates are normalized 0-100 against the supplied floor map and map ID.
 

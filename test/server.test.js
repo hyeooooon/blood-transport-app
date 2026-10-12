@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import { createApp } from '../server.js';
 
 test('HTTP session, scoped data, telemetry authentication and handover workflow', async t => {
@@ -14,14 +17,42 @@ test('HTTP session, scoped data, telemetry authentication and handover workflow'
   const cookie = login.headers.get('set-cookie').split(';')[0];
   const state = await (await req('/api/state', null, cookie)).json();
   assert.equal(state.deliveries.length, 2);
+  const events = await req('/api/events', null, cookie);
+  const reader = events.body.getReader();
+  const firstEvent = new TextDecoder().decode((await reader.read()).value);
+  assert.match(firstEvent, /RR-2048/);
+  assert.doesNotMatch(firstEvent, /RR-2050/);
+  await reader.cancel();
+  assert.equal((await req('/api/deliveries/RR-2048/scenario', { scenario: 'temperature' }, cookie)).status, 400, 'disabled simulator cannot emit even a single simulated update');
   assert.equal((await req('/api/deliveries/RR-2050/incident', { message: 'Cannot access another ward' }, cookie)).status, 400);
   assert.equal((await req('/api/telemetry', { anything: true })).status, 401);
   const now = new Date().toISOString();
-  const packet = { robotId: 'RR-01', deliveryId: 'RR-2048', timestamp: now, temperatureC: 4.2, impactG: .1, agitationRpm: null, batteryPct: 80, locked: true, etaSeconds: 0, status: 'arrived', position: { x: 84, y: 78, floor: 'L4', mapId: 'demo-hospital', timestamp: now } };
+  const packet = { robotId: 'RR-01', deliveryId: 'RR-2048', timestamp: now, transportStartedAt: now, temperatureC: 4.2, impactG: .1, agitationRpm: null, batteryPct: 80, locked: true, etaSeconds: 0, status: 'arrived', position: { x: 84, y: 78, floor: 'L4', mapId: 'demo-hospital', timestamp: now } };
   assert.equal((await req('/api/telemetry', packet, null, 'test-token')).status, 200);
   assert.equal((await req('/api/deliveries/RR-2048/receive', { code: 'RBC-008421' }, cookie)).status, 200);
   const after = await (await req('/api/state', null, cookie)).json();
   assert.equal(after.deliveries[0].status, 'delivered');
   assert.equal((await req('/api/logout', {}, cookie)).status, 200);
   assert.equal((await req('/api/state', null, cookie)).status, 401);
+});
+
+test('workflow records survive a server restart', async t => {
+  mkdirSync('tmp', { recursive: true });
+  const dataFile = path.resolve('tmp', `persistence-${randomUUID()}.json`);
+  const first = createApp({ persist: true, simulate: false, dataFile });
+  await new Promise(r => first.server.listen(0, '127.0.0.1', r));
+  t.after(() => { unlinkSync(dataFile); });
+  const base = `http://127.0.0.1:${first.server.address().port}`;
+  const login = await fetch(base + '/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ staffId: 'sarah' }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const report = await fetch(base + '/api/deliveries/RR-2048/incident', { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify({ message: 'Verify this record survives restart' }) });
+  assert.equal(report.status, 200);
+  first.server.closeAllConnections();
+  await new Promise(r => first.server.close(r));
+  assert.equal(JSON.parse(readFileSync(dataFile, 'utf8')).alerts.length, 1);
+  const second = createApp({ persist: true, simulate: false, dataFile });
+  await new Promise(r => second.server.listen(0, '127.0.0.1', r));
+  t.after(() => new Promise(r => { second.server.closeAllConnections(); second.server.close(r); }));
+  assert.equal(second.store.state.alerts[0].detail, 'Verify this record survives restart');
+  assert.equal(second.store.state.audit.at(-1).actor, 'Sarah Lee');
 });

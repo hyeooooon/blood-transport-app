@@ -13,6 +13,7 @@ export function createApp({ persist = true, simulate = true, token = process.env
     catch (e) { throw new Error(`Cannot load saved state (${dataFile}): ${e.message}. Preserve the file before resetting.`); }
   }
   const store = createStore({ initial });
+  const snapshotFor = (user, time = Date.now()) => ({ ...store.snapshot(user, time), simulatorEnabled: simulate });
   const sessions = new Map(), streams = new Set();
   function save() {
     if (!persist) return;
@@ -25,7 +26,7 @@ export function createApp({ persist = true, simulate = true, token = process.env
     for (const client of streams) {
       const session = sessions.get(client.sid);
       if (!session || session.expires < now) { client.res.end(); streams.delete(client); continue; }
-      client.res.write(`data: ${JSON.stringify(store.snapshot(session.user, now))}\n\n`);
+      client.res.write(`data: ${JSON.stringify(snapshotFor(session.user, now))}\n\n`);
     }
   }
   function json(res, status, body, headers = {}) {
@@ -70,11 +71,11 @@ export function createApp({ persist = true, simulate = true, token = process.env
           sessions.delete(sid); broadcast();
           return json(res, 200, { ok: true }, { 'Set-Cookie': 'redroute=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
         }
-        if (route === '/api/state' && req.method === 'GET') return json(res, 200, store.snapshot(user));
+        if (route === '/api/state' && req.method === 'GET') return json(res, 200, snapshotFor(user));
         if (route === '/api/events' && req.method === 'GET') {
           res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
           const client = { res, sid }; streams.add(client);
-          res.write(`data: ${JSON.stringify(store.snapshot(user))}\n\n`);
+          res.write(`data: ${JSON.stringify(snapshotFor(user))}\n\n`);
           req.on('close', () => streams.delete(client)); return;
         }
         if (route === '/api/export' && req.method === 'GET') {
@@ -87,15 +88,18 @@ export function createApp({ persist = true, simulate = true, token = process.env
           const alert = /^\/api\/alerts\/([^/]+)\/(acknowledge|resolve)$/.exec(route);
           if (delivery) {
             const [, id, action] = delivery;
-            if (action === 'scenario') store.scenario(id, input.scenario, user);
+            if (action === 'scenario') {
+              if (!simulate) throw new Error('Simulator is disabled on this server');
+              store.scenario(id, input.scenario, user);
+            }
             if (action === 'incident') store.report(id, input.message, user);
             if (action === 'receive') store.receive(id, input.code, user);
-            store.simulate(Date.now());
+            if (simulate) store.simulate(Date.now());
           } else if (alert) {
             if (alert[2] === 'acknowledge') store.acknowledge(alert[1], user); else store.resolve(alert[1], user);
           } else if (route === '/api/profiles') store.updateProfile(input.product, input, user);
           else return json(res, 404, { error: 'Endpoint not found' });
-          save(); broadcast(); return json(res, 200, store.snapshot(user));
+          save(); broadcast(); return json(res, 200, snapshotFor(user));
         }
         return json(res, 404, { error: 'Endpoint not found' });
       }
