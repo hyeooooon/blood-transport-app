@@ -1,0 +1,9 @@
+{
+  "name": "redroute-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Blood transport monitoring prototype with live telemetry",
+  "scripts": { "start": "node server.js", "test": "node --test", "check": "node --check server.js && node --check lib/store.js && node --check public/app.js" },
+  "engines": { "node": ">=20" }
+}
