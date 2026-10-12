@@ -105,3 +105,11 @@ test('real telemetry never inherits the fictional dispatch timer', () => {
   assert.equal(snap.alerts.some(a => a.type === 'duration'), false);
   assert.equal(snap.alerts.some(a => a.type === 'timer' && a.active), true);
 });
+test('missing dispatch time cannot falsely clear a duration excursion', () => {
+  const s = createStore({ now: 100000 });
+  s.ingest(packet(101000, { transportStartedAt: new Date(101000 - 31 * 60000).toISOString() }), 101000);
+  s.ingest(packet(102000, { transportStartedAt: null }), 102000);
+  const a = s.snapshot(nurse, 102000).alerts.find(a => a.type === 'duration');
+  assert.equal(a.active, true);
+  assert.equal(a.resolvedAt, undefined);
+});
