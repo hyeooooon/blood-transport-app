@@ -107,6 +107,8 @@ The server binds to `127.0.0.1`. For a separate TurtleBot computer, use an SSH p
 
 Local workflow state, alerts, audit events and up to 180 recent readings per delivery are saved to `data/state.json` (ignored by Git). Sessions are in memory and expire after eight hours; restart requires selecting a demo identity again. History timestamps use Singapore time in the interface; exported timestamps are ISO UTC.
 
+Record saves are serialized and use atomic replacement with short retries for transient Windows/OneDrive locks. If saving still fails, the server reports the failure and retains the complete temporary snapshot for recovery rather than discarding it.
+
 To start a fresh demonstration, stop the server, preserve any report you need, and rename `data/state.json` to a backup filename. Restart seeds fictional deliveries again. This also removes robot-source assignments from the active demo state. Do not reset state while a real adapter is transmitting. For long-term monitoring, replace bounded local JSON storage with an appropriate telemetry database and retention policy.
 
 ## Verification

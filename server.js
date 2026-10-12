@@ -1,9 +1,10 @@
 import http from 'node:http';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { createStore, STAFF } from './lib/store.js';
+import { createPersistence } from './lib/persistence.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 export function createApp({ persist = true, simulate = true, token = process.env.TELEMETRY_TOKEN || 'local-prototype-token', dataFile = path.join(root, 'data/state.json') } = {}) {
@@ -15,12 +16,8 @@ export function createApp({ persist = true, simulate = true, token = process.env
   const store = createStore({ initial });
   const snapshotFor = (user, time = Date.now()) => ({ ...store.snapshot(user, time), simulatorEnabled: simulate });
   const sessions = new Map(), streams = new Set();
-  function save() {
-    if (!persist) return;
-    mkdirSync(path.dirname(dataFile), { recursive: true });
-    writeFileSync(dataFile + '.tmp', JSON.stringify(store.state));
-    renameSync(dataFile + '.tmp', dataFile);
-  }
+  const writeState = createPersistence(dataFile);
+  const save = () => persist ? writeState(store.state) : Promise.resolve();
   function broadcast() {
     const now = Date.now();
     for (const client of streams) {
@@ -50,7 +47,7 @@ export function createApp({ persist = true, simulate = true, token = process.env
         const received = Buffer.from(req.headers.authorization || '');
         const expected = Buffer.from(`Bearer ${token}`);
         if (received.length !== expected.length || !timingSafeEqual(received, expected)) return json(res, 401, { error: 'Telemetry bearer token required' });
-        store.ingest(await body(req)); save(); broadcast();
+        store.ingest(await body(req)); await save(); broadcast();
         return json(res, 200, { accepted: true });
       }
       if (route === '/api/staff' && req.method === 'GET') return json(res, 200, { staff: Object.values(STAFF), demo: true });
@@ -99,7 +96,7 @@ export function createApp({ persist = true, simulate = true, token = process.env
             if (alert[2] === 'acknowledge') store.acknowledge(alert[1], user); else store.resolve(alert[1], user);
           } else if (route === '/api/profiles') store.updateProfile(input.product, input, user);
           else return json(res, 404, { error: 'Endpoint not found' });
-          save(); broadcast(); return json(res, 200, snapshotFor(user));
+          await save(); broadcast(); return json(res, 200, snapshotFor(user));
         }
         return json(res, 404, { error: 'Endpoint not found' });
       }
@@ -112,8 +109,8 @@ export function createApp({ persist = true, simulate = true, token = process.env
       res.end(req.method === 'HEAD' ? undefined : content);
     } catch (e) { if (!res.headersSent) json(res, 400, { error: e.message }); else res.end(); }
   });
-  const timer = setInterval(() => {
-    try { if (simulate) store.simulate(); broadcast(); save(); }
+  const timer = setInterval(async () => {
+    try { if (simulate) store.simulate(); broadcast(); await save(); }
     catch (e) { console.error('Telemetry update failed:', e.message); }
     for (const [id, s] of sessions) if (s.expires < Date.now()) sessions.delete(id);
   }, 2000);

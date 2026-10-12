@@ -2,7 +2,7 @@
 
 Verified locally on 12 October 2026 with Node.js 24 and headless Microsoft Edge via Playwright. Runtime minimum is Node 20.
 
-- `npm test`: 16 tests covering telemetry, ward visibility, alert deduplication and recovery, receipt constraints, robot/simulator isolation, unknown dispatch time, separate agitation/impact, supervisor profile changes, HTTP/SSE scope and persisted workflow records after restart.
+- `npm test`: 17 tests covering telemetry, ward visibility, alert deduplication and recovery, receipt constraints, robot/simulator isolation, unknown dispatch time, separate agitation/impact, supervisor profile changes, HTTP/SSE scope, persisted workflow records after restart and transient Windows file-lock retries.
 - `npm run check`: syntax checks for server, store and browser application.
 - `python -m py_compile scripts/telemetry_bridge.py`: Python bridge syntax check.
 - `node scripts/verify-browser.mjs`: desktop 1440px and phone 390px layouts without horizontal overflow; temperature alert/acknowledgement/recovery; connection loss; stale ETA removal; incident reporting/resolution; incorrect and correct receipt identifiers; search retained during refresh; profile controls restricted to supervisor. No unexpected browser console errors or JavaScript exceptions. Expected HTTP errors for unsigned-in access and an incorrect receipt code are excluded.
